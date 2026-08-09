@@ -8,10 +8,13 @@ const T_ELEGIDO = 21 * 60 + 55; // 21:55 -> se revela el elegido
 const T_ESCRIBIENDO = 22 * 60;  // 22:00 -> se abre la hora para escribir
 const T_CIERRE = 23 * 60;       // 23:00 -> se cierra la ventana
 
+// Tolerancia: si el cron se retrasa o se salta un tick (cada 5 min),
+// esta ventana permite "recuperar" la tarea en los siguientes minutos
+// en vez de perderla para siempre ese día.
+const VENTANA_TOLERANCIA_MIN = 10;
+
 // ---------------------------------------------------------------
 // GET /api/estado — llamado por el frontend cada pocos segundos
-// Nota: nunca se envía el nombre del agraciado ni del autor del
-// mensaje — el faro es anónimo. Solo se envía el número del dado.
 // ---------------------------------------------------------------
 export async function getEstado(request, env, origin) {
   const usuario = await usuarioDesdePeticion(request, env);
@@ -24,11 +27,15 @@ export async function getEstado(request, env, origin) {
     .prepare('SELECT COUNT(*) AS n FROM users').first())?.n ?? 0;
 
   const sorteo = await env.DB
-    .prepare('SELECT * FROM sorteos WHERE fecha_ciclo = ?')
+    .prepare(`SELECT s.*, u.nombre_completo
+              FROM sorteos s JOIN users u ON u.id = s.ganador_user_id
+              WHERE s.fecha_ciclo = ?`)
     .bind(ciclo).first();
 
   const mensajeRow = sorteo ? await env.DB
-    .prepare('SELECT * FROM mensajes WHERE sorteo_id = ?')
+    .prepare(`SELECT m.*, u.nombre_completo
+              FROM mensajes m JOIN users u ON u.id = m.user_id
+              WHERE m.sorteo_id = ?`)
     .bind(sorteo.id).first() : null;
 
   const fase = calcularFase(hm, sorteo, mensajeRow);
@@ -36,11 +43,12 @@ export async function getEstado(request, env, origin) {
   const respuesta = { fase, totalUsuarios };
 
   if (sorteo) {
-    respuesta.ganador = { id: sorteo.ganador_user_id };
+    respuesta.ganador = { id: sorteo.ganador_user_id, nombre: sorteo.nombre_completo };
     respuesta.numeroElegido = sorteo.numero_elegido;
   }
   if (mensajeRow) {
     respuesta.mensaje = {
+      nombre: mensajeRow.nombre_completo,
       categoria: mensajeRow.categoria,
       texto: mensajeRow.texto
     };
@@ -69,17 +77,46 @@ function calcularFase(hm, sorteo, mensaje) {
 }
 
 // ---------------------------------------------------------------
+// Control de ejecución única por ciclo (evita duplicados si la
+// ventana de tolerancia coincide con más de un tick del cron)
+// ---------------------------------------------------------------
+async function yaEjecutado(env, ciclo, tarea) {
+  const row = await env.DB
+    .prepare('SELECT 1 FROM cron_ejecuciones WHERE ciclo = ? AND tarea = ?')
+    .bind(ciclo, tarea).first();
+  return !!row;
+}
+
+async function marcarEjecutado(env, ciclo, tarea) {
+  await env.DB
+    .prepare('INSERT OR IGNORE INTO cron_ejecuciones (ciclo, tarea) VALUES (?, ?)')
+    .bind(ciclo, tarea).run();
+}
+
+function dentroDeVentana(hm, objetivo) {
+  return hm >= objetivo && hm < objetivo + VENTANA_TOLERANCIA_MIN;
+}
+
+// ---------------------------------------------------------------
 // Tarea programada (cron cada 5 min) — ver src/index.js `scheduled`
 // ---------------------------------------------------------------
 export async function ejecutarTareaProgramada(env) {
   const hm = madridNow().minutesOfDay;
   const ciclo = cicloActual();
 
-  if (hm === T_CUMPLE) await avisarCumpleanos(env);
-  if (hm === T_GIRANDO) await avisarDadoGirando(env);
-  if (hm === T_ELEGIDO) await elegirGanador(env, ciclo);
-  if (hm === T_ESCRIBIENDO) await avisarInicioEscritura(env, ciclo);
-  if (hm === T_CIERRE) await avisarSiSinMensaje(env, ciclo);
+  await ejecutarSiToca(env, ciclo, 'cumple', hm, T_CUMPLE, () => avisarCumpleanos(env));
+  await ejecutarSiToca(env, ciclo, 'girando', hm, T_GIRANDO, () => avisarDadoGirando(env));
+  await ejecutarSiToca(env, ciclo, 'elegido', hm, T_ELEGIDO, () => elegirGanador(env, ciclo));
+  await ejecutarSiToca(env, ciclo, 'escribiendo', hm, T_ESCRIBIENDO, () => avisarInicioEscritura(env, ciclo));
+  await ejecutarSiToca(env, ciclo, 'cierre', hm, T_CIERRE, () => avisarSiSinMensaje(env, ciclo));
+}
+
+async function ejecutarSiToca(env, ciclo, tarea, hm, objetivo, accion) {
+  if (!dentroDeVentana(hm, objetivo)) return;
+  if (await yaEjecutado(env, ciclo, tarea)) return;
+
+  await accion();
+  await marcarEjecutado(env, ciclo, tarea);
 }
 
 async function avisarCumpleanos(env) {
