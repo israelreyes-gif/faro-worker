@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   password_salt TEXT NOT NULL,
   nombre_completo TEXT NOT NULL,
-  rol_familiar TEXT,
+  fecha_nacimiento TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
