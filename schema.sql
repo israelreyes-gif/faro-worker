@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS users (
   password_salt TEXT NOT NULL,
   nombre_completo TEXT NOT NULL,
   fecha_nacimiento TEXT,
+  login_fallos INTEGER NOT NULL DEFAULT 0,
+  login_bloqueado_hasta TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -37,4 +39,11 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   auth TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS cron_ejecuciones (
+  ciclo TEXT NOT NULL,
+  tarea TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (ciclo, tarea)
 );
