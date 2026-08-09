@@ -109,6 +109,17 @@ export async function ejecutarTareaProgramada(env) {
   await ejecutarSiToca(env, ciclo, 'elegido', hm, T_ELEGIDO, () => elegirGanador(env, ciclo));
   await ejecutarSiToca(env, ciclo, 'escribiendo', hm, T_ESCRIBIENDO, () => avisarInicioEscritura(env, ciclo));
   await ejecutarSiToca(env, ciclo, 'cierre', hm, T_CIERRE, () => avisarSiSinMensaje(env, ciclo));
+  await ejecutarSiToca(env, ciclo, 'limpieza', hm, T_RESET, () => limpiarCronAntiguo(env));
+}
+
+// Mantenimiento: borra registros de cron_ejecuciones de hace más de 60 días.
+// Se ejecuta una vez al día (a las 10:00, hueco de T_RESET) para no dejar
+// crecer la tabla indefinidamente, aunque en la práctica tardaría años en
+// suponer un problema real de tamaño.
+async function limpiarCronAntiguo(env) {
+  await env.DB
+    .prepare(`DELETE FROM cron_ejecuciones WHERE ciclo < date('now', '-60 days')`)
+    .run();
 }
 
 async function ejecutarSiToca(env, ciclo, tarea, hm, objetivo, accion) {
