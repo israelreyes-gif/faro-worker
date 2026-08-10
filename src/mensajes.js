@@ -1,12 +1,18 @@
-import { json, error, cicloActual, usuarioDesdePeticion } from './utils.js';
+import { json, error, cicloActual, usuarioDesdePeticion, comprobarRateLimit } from './utils.js';
 import { enviarATodos } from './push.js';
 
 const CATEGORIAS_VALIDAS = ['historia', 'recuerdo', 'consejo'];
 const TEXTO_MAX_LENGTH = 500;
+const MENSAJE_COOLDOWN_MS = 3000;
 
 export async function postMensaje(request, env, origin) {
   const usuario = await usuarioDesdePeticion(request, env);
   if (!usuario) return error('No autenticado.', 401, origin);
+
+  const { limitado, segundosRestantes } = await comprobarRateLimit(env, `mensaje_${usuario.id}`, MENSAJE_COOLDOWN_MS);
+  if (limitado) {
+    return error(`Espera ${segundosRestantes} segundo(s) antes de intentarlo de nuevo.`, 429, origin);
+  }
 
   const { categoria, texto } = await request.json().catch(() => ({}));
   if (!CATEGORIAS_VALIDAS.includes(categoria)) {
