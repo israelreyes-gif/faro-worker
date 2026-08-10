@@ -47,3 +47,8 @@ CREATE TABLE IF NOT EXISTS cron_ejecuciones (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (ciclo, tarea)
 );
+
+CREATE TABLE IF NOT EXISTS rate_limits (
+  clave TEXT PRIMARY KEY,
+  last_at TEXT NOT NULL
+);
