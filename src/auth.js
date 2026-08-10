@@ -1,9 +1,15 @@
-import { json, error, hashPassword, verifyPassword, firmarToken } from './utils.js';
+import { json, error, hashPassword, verifyPassword, firmarToken, comprobarRateLimit } from './utils.js';
 
 const MAX_INTENTOS = 5;
 const BLOQUEO_MINUTOS = 15;
+const REGISTRO_COOLDOWN_MS = 5000;
 
 export async function registrar(request, env, origin) {
+  const { limitado, segundosRestantes } = await comprobarRateLimit(env, 'register_global', REGISTRO_COOLDOWN_MS);
+  if (limitado) {
+    return error(`Espera ${segundosRestantes} segundo(s) antes de intentarlo de nuevo.`, 429, origin);
+  }
+
   const body = await request.json().catch(() => ({}));
   const { username, password, password2, nombre, fechaNacimiento } = body;
 
