@@ -2,6 +2,7 @@ import { json, error, cicloActual, usuarioDesdePeticion } from './utils.js';
 import { enviarATodos } from './push.js';
 
 const CATEGORIAS_VALIDAS = ['historia', 'recuerdo', 'consejo'];
+const TEXTO_MAX_LENGTH = 500;
 
 export async function postMensaje(request, env, origin) {
   const usuario = await usuarioDesdePeticion(request, env);
@@ -13,6 +14,9 @@ export async function postMensaje(request, env, origin) {
   }
   if (!texto || !texto.trim()) {
     return error('Escribe algo antes de encender el faro.', 400, origin);
+  }
+  if (texto.trim().length > TEXTO_MAX_LENGTH) {
+    return error(`El mensaje no puede superar los ${TEXTO_MAX_LENGTH} caracteres.`, 400, origin);
   }
 
   const ciclo = cicloActual();
