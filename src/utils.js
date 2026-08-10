@@ -108,3 +108,29 @@ export async function usuarioDesdePeticion(request, env) {
   const payload = await verificarToken(token, env.JWT_SECRET);
   return payload;
 }
+
+// Comprueba si ha pasado suficiente tiempo desde el último intento bajo esa
+// clave. Si es así, registra el intento actual y devuelve { limitado: false }.
+// Si no, devuelve { limitado: true, segundosRestantes } sin registrar nada nuevo.
+export async function comprobarRateLimit(env, clave, minIntervaloMs) {
+  const row = await env.DB
+    .prepare('SELECT last_at FROM rate_limits WHERE clave = ?')
+    .bind(clave).first();
+
+  const ahora = Date.now();
+
+  if (row) {
+    const transcurrido = ahora - new Date(row.last_at).getTime();
+    if (transcurrido < minIntervaloMs) {
+      return { limitado: true, segundosRestantes: Math.ceil((minIntervaloMs - transcurrido) / 1000) };
+    }
+  }
+
+  const iso = new Date(ahora).toISOString();
+  await env.DB.prepare(
+    `INSERT INTO rate_limits (clave, last_at) VALUES (?, ?)
+     ON CONFLICT(clave) DO UPDATE SET last_at = ?`
+  ).bind(clave, iso, iso).run();
+
+  return { limitado: false };
+}
