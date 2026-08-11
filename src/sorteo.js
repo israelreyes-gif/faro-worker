@@ -1,4 +1,4 @@
-import { json, error, madridNow, cicloActual, usuarioDesdePeticion } from './utils.js';
+import { json, error, madridNow, cicloActual, usuarioDesdePeticion, firmarToken } from './utils.js';
 import { enviarAUsuario, enviarATodos } from './push.js';
 
 const T_CUMPLE = 9 * 60;        // 09:00 -> avisos de cumpleaños
@@ -12,6 +12,12 @@ const T_CIERRE = 23 * 60;       // 23:00 -> se cierra la ventana
 // esta ventana permite "recuperar" la tarea en los siguientes minutos
 // en vez de perderla para siempre ese día.
 const VENTANA_TOLERANCIA_MIN = 10;
+
+// Duración del token y umbral de renovación silenciosa: si al token le
+// quedan menos de 7 días de vida cuando se usa, se emite uno nuevo con
+// otros 30 días por delante, para que el uso diario nunca caduque.
+const TOKEN_DURACION_MS = 1000 * 60 * 60 * 24 * 30;
+const TOKEN_RENOVAR_UMBRAL_MS = 1000 * 60 * 60 * 24 * 7;
 
 // ---------------------------------------------------------------
 // GET /api/estado — llamado por el frontend cada pocos segundos
@@ -55,6 +61,16 @@ export async function getEstado(request, env, origin) {
   }
   if (fase === 'escribiendo') {
     respuesta.segundosRestantes = Math.max(0, (T_CIERRE - hm) * 60 - madridNow().second);
+  }
+
+  // Renovación silenciosa: si al token le quedan menos de 7 días, se
+  // emite uno nuevo con otros 30 días por delante. El frontend lo
+  // guarda sin que la persona note nada.
+  if (usuario.exp && (usuario.exp - Date.now()) < TOKEN_RENOVAR_UMBRAL_MS) {
+    respuesta.nuevoToken = await firmarToken(
+      { id: usuario.id, username: usuario.username, exp: Date.now() + TOKEN_DURACION_MS },
+      env.JWT_SECRET
+    );
   }
 
   return json(respuesta, {}, origin);
