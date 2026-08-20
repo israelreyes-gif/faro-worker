@@ -50,7 +50,12 @@ export async function getEstado(request, env, origin) {
 
   if (sorteo) {
     respuesta.ganador = { id: sorteo.ganador_user_id, nombre: sorteo.nombre_completo };
-    respuesta.numeroElegido = sorteo.numero_elegido;
+    // El número solo se envía a quien fue elegido. Para el resto no viaja
+    // en la respuesta, así nadie puede llevar la cuenta de qué número le
+    // tocó a quién noche tras noche.
+    if (sorteo.ganador_user_id === usuario.id) {
+      respuesta.numeroElegido = sorteo.numero_elegido;
+    }
   }
   if (mensajeRow) {
     respuesta.mensaje = {
