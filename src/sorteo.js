@@ -63,6 +63,14 @@ export async function getEstado(request, env, origin) {
       categoria: mensajeRow.categoria,
       texto: mensajeRow.texto
     };
+
+    const fotoRow = await env.DB
+      .prepare('SELECT datos, mime_type FROM foto_dia WHERE id = 1 AND sorteo_id = ?')
+      .bind(sorteo.id).first();
+    if (fotoRow?.datos) {
+      respuesta.mensaje.foto = fotoRow.datos;
+      respuesta.mensaje.fotoMime = fotoRow.mime_type;
+    }
   }
   if (fase === 'escribiendo') {
     respuesta.segundosRestantes = Math.max(0, (T_CIERRE - hm) * 60 - madridNow().second);
@@ -131,6 +139,7 @@ export async function ejecutarTareaProgramada(env) {
   await ejecutarSiToca(env, ciclo, 'escribiendo', hm, T_ESCRIBIENDO, () => avisarInicioEscritura(env, ciclo));
   await ejecutarSiToca(env, ciclo, 'cierre', hm, T_CIERRE, () => avisarSiSinMensaje(env, ciclo));
   await ejecutarSiToca(env, ciclo, 'limpieza', hm, T_RESET, () => limpiarCronAntiguo(env));
+  await ejecutarSiToca(env, ciclo, 'limpieza_foto', hm, T_RESET, () => limpiarFotoDia(env));
 }
 
 // Mantenimiento: borra registros de cron_ejecuciones de hace más de 60 días.
@@ -140,6 +149,14 @@ export async function ejecutarTareaProgramada(env) {
 async function limpiarCronAntiguo(env) {
   await env.DB
     .prepare(`DELETE FROM cron_ejecuciones WHERE ciclo < date('now', '-60 days')`)
+    .run();
+}
+
+// Vacía la foto del día anterior en el reseteo diario, para que nunca
+// ocupe espacio de forma permanente en la base de datos.
+async function limpiarFotoDia(env) {
+  await env.DB
+    .prepare('UPDATE foto_dia SET sorteo_id = NULL, datos = NULL, mime_type = NULL WHERE id = 1')
     .run();
 }
 
