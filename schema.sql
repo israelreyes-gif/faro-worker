@@ -52,3 +52,11 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   clave TEXT PRIMARY KEY,
   last_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS foto_dia (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  sorteo_id INTEGER,
+  datos TEXT,
+  mime_type TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
